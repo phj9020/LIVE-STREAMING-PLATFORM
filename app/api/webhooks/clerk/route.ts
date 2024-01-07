@@ -1,6 +1,7 @@
 import { Webhook } from 'svix'
 import { headers } from 'next/headers'
 import { WebhookEvent } from '@clerk/nextjs/server'
+import { db } from '@/lib/db'
 
 /**
  * clerk web hook : sync user data
@@ -52,11 +53,41 @@ export async function POST(req: Request) {
     })
   }
 
-  // Get the ID and type
-  const { id } = evt.data;
   const eventType = evt.type;
 
-  console.log(`Webhook with and ID of ${id} and type of ${eventType}`)
+  // Clerk 웹훅 수신 받을 때 eventType에 따라 생성된 User를 받아 prisma mysql db에 쌓아야한다.
+  if (eventType === 'user.created') {
+    await db.user.create({
+      data: {
+        externalUserId: payload.data.id,
+        username: payload.data.username,
+        imageUrl: payload.data.image_url,
+      }
+    })
+  }
+
+  // user정보 업데이트
+  if (eventType === 'user.updated') {
+    //db에 저장된 외부 id값을 id로 판별 생성시 externalUserId에 id를 할당했으므로
+    await db.user.update({
+      where: {
+        externalUserId: payload.data.id,
+      },
+      data: {
+        username: payload.data.username,
+        imageUrl: payload.data.image_url,
+      }
+    })
+  }
+  
+  // user 계정 삭제 시 
+  if(eventType === 'user.deleted') {
+    await db.user.delete({
+      where: {
+        externalUserId: payload.data.id
+      }
+    })
+  }
   console.log('Webhook body:', body)
 
   return new Response('', { status: 200 })
